@@ -5,8 +5,11 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { seedDatabase } from './src/database/seeder';
+import { loadModel } from './src/utils/mlService';
 import { Colors, Typography, BorderRadius } from './src/utils/theme';
 import { ShieldCheck, Sparkles } from 'lucide-react-native';
+
+import { LanguageProvider } from './src/context/LanguageContext';
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
@@ -15,6 +18,8 @@ export default function App() {
     async function prepareApp() {
       try {
         await seedDatabase();
+        // Warm up edge ONNX model in background
+        loadModel().catch((err) => console.log('Edge model initial load:', err));
       } catch (e) {
         console.warn('Database initialization warning:', e);
       } finally {
@@ -54,10 +59,12 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
-      <NavigationContainer>
-        <RootNavigator />
-      </NavigationContainer>
+      <LanguageProvider>
+        <StatusBar style="light" />
+        <NavigationContainer>
+          <RootNavigator />
+        </NavigationContainer>
+      </LanguageProvider>
     </SafeAreaProvider>
   );
 }

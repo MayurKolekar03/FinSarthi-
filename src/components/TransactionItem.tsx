@@ -16,6 +16,8 @@ import {
 import { Transaction } from '../types';
 import { Colors, Spacing, Typography, BorderRadius } from '../utils/theme';
 import { formatINR, formatFriendlyDate } from '../utils/currency';
+import { useLanguage } from '../context/LanguageContext';
+import { getCategoryLabel } from '../utils/i18n';
 
 interface TransactionItemProps {
   transaction: Transaction;
@@ -26,6 +28,7 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
   transaction,
   onPress,
 }) => {
+  const { language } = useLanguage();
   const isDebit = transaction.type === 'debit';
   const categoryColor = Colors.categories[transaction.category] || Colors.slateGray;
 
@@ -90,7 +93,7 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
 
             {/* Category tag */}
             <Text style={styles.categoryTag} numberOfLines={1}>
-              • {transaction.category}
+              • {getCategoryLabel(transaction.category, language)}
             </Text>
           </View>
         </View>

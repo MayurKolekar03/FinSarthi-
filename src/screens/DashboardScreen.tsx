@@ -19,11 +19,14 @@ import { Colors, Spacing, Typography, BorderRadius } from '../utils/theme';
 import { fetchAllFinanceData } from '../database/seeder';
 import { getDB } from '../database/db';
 import { Account, Transaction, SupportedLanguage, TransactionCategory } from '../types';
-import { Plus, X, ArrowUpDown, ChevronRight, Check } from 'lucide-react-native';
+import { predictCategory, mapModelLabelToCategory } from '../utils/mlService';
+import { parseAndProcessSMS } from '../utils/smsParser';
+import { useLanguage } from '../context/LanguageContext';
+import { Plus, X, ArrowUpDown, ChevronRight, Check, Sparkles } from 'lucide-react-native';
 
 export const DashboardScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const [language, setLanguage] = useState<SupportedLanguage>('EN');
+  const { language, setLanguage, t } = useLanguage();
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -40,6 +43,11 @@ export const DashboardScreen: React.FC = () => {
   const [categoryInput, setCategoryInput] = useState<TransactionCategory>('Food & Dining');
   const [selectedAccountId, setSelectedAccountId] = useState('acc_hdfc');
   const [typeInput, setTypeInput] = useState<'debit' | 'credit'>('debit');
+
+  // SMS Simulation State
+  const [isSmsModalVisible, setIsSmsModalVisible] = useState(false);
+  const [customSmsSender, setCustomSmsSender] = useState('AD-HDFCBK-T');
+  const [customSmsBody, setCustomSmsBody] = useState('Your HDFC Bank a/c XX1234 is debited for INR 450.00 at Sharma Tea Stall on 12-Oct-26.');
 
   const loadData = useCallback(async () => {
     try {
@@ -74,15 +82,19 @@ export const DashboardScreen: React.FC = () => {
     }
 
     try {
+      // Edge AI ONNX Inference for smart categorization
+      const predictedLabel = await predictCategory(merchantInput.trim());
+      const resolvedCategory = mapModelLabelToCategory(predictedLabel);
+
       const db = getDB();
       await db.addTransaction({
         account_id: selectedAccountId,
         amount: numAmount,
         merchant: merchantInput.trim(),
-        category: categoryInput,
+        category: resolvedCategory,
         type: typeInput,
         date: new Date().toISOString(),
-        notes: 'Manually logged via FinSarathi',
+        notes: `Manual Log • Edge ONNX (${predictedLabel})`,
       });
 
       setIsModalVisible(false);
@@ -91,6 +103,24 @@ export const DashboardScreen: React.FC = () => {
       loadData();
     } catch (err) {
       console.error('Failed to save transaction:', err);
+    }
+  };
+
+  const handleProcessBankSMS = async (sender: string, body: string) => {
+    try {
+      const res = await parseAndProcessSMS(sender, body, selectedAccountId);
+      if (res.success && res.extracted) {
+        Alert.alert(
+          '⚡ SMS Parsed & Categorized!',
+          `TRAI Header: ${sender}\nMerchant: ${res.extracted.merchant}\nAmount: ₹${res.extracted.amount}\nModel Class: [${res.extracted.predictedCategory}]\nCategory: ${res.extracted.uiCategory}\n\nPersisted to local SQLite ledger.`
+        );
+        setIsSmsModalVisible(false);
+        loadData();
+      } else {
+        Alert.alert('SMS Validation Gate', res.error || 'SMS failed validation.');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Failed to process SMS');
     }
   };
 
@@ -146,18 +176,27 @@ export const DashboardScreen: React.FC = () => {
         {/* Recent Transactions List Header */}
         <View style={styles.sectionHeaderRow}>
           <View>
-            <Text style={styles.sectionTitle}>Recent Transactions</Text>
+            <Text style={styles.sectionTitle}>{t('recentTransactions')}</Text>
             <Text style={styles.sectionSubtitle}>
-              Live Ledger • {transactions.length} Records
+              {t('privacyGuard')} • {transactions.length}
             </Text>
           </View>
-          <TouchableOpacity
-            style={styles.filterChip}
-            onPress={() => onRefresh()}
-          >
-            <ArrowUpDown size={12} color={Colors.emeraldGreen} />
-            <Text style={styles.filterChipText}>Sync</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              style={[styles.filterChip, { backgroundColor: Colors.emeraldLight, borderColor: 'rgba(16, 185, 129, 0.4)' }]}
+              onPress={() => setIsSmsModalVisible(true)}
+            >
+              <Sparkles size={12} color={Colors.emeraldGreen} />
+              <Text style={[styles.filterChipText, { color: Colors.emeraldGreen, fontWeight: '700' }]}>{t('testSmsAi')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.filterChip}
+              onPress={() => onRefresh()}
+            >
+              <ArrowUpDown size={12} color={Colors.emeraldGreen} />
+              <Text style={styles.filterChipText}>Sync</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Transactions List */}
@@ -317,6 +356,114 @@ export const DashboardScreen: React.FC = () => {
             >
               <Check size={18} color={Colors.primaryNavy} />
               <Text style={styles.submitBtnText}>Save to Local SQLite Ledger</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edge AI SMS Parsing & Categorization Modal */}
+      <Modal
+        visible={isSmsModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsSmsModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Sparkles size={20} color={Colors.emeraldGreen} />
+                <Text style={styles.modalTitle}>TRAI + SetFit ONNX Pipeline</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setIsSmsModalVisible(false)}
+                style={styles.closeBtn}
+              >
+                <X size={20} color={Colors.slateLight} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={{ color: Colors.slateLight, fontSize: 12, marginBottom: 12 }}>
+              Select a realistic Indian bank SMS or type below to test TRAI DLT validation, Edge SetFit classification, and SQLite persistence:
+            </Text>
+
+            {/* Quick SMS Presets */}
+            <Text style={styles.inputLabel}>Quick Indian Bank SMS Presets</Text>
+            <View style={{ gap: 6, marginBottom: 14 }}>
+              {[
+                {
+                  sender: 'AD-HDFCBK-T',
+                  body: 'Your HDFC Bank a/c XX1234 debited INR 450.00 at Sharma Tea Stall via UPI.',
+                  expected: 'Food',
+                },
+                {
+                  sender: 'VM-ICICIB-T',
+                  body: 'Spent INR 1,899 on your ICICI Card for Myntra Shopping. Avl Lmt: INR 85,000.',
+                  expected: 'Shopping',
+                },
+                {
+                  sender: 'VK-SBIINB-T',
+                  body: 'Paid Rs. 340 to Uber India via UPI ref 492019. Balance: Rs. 42,100.',
+                  expected: 'Travel',
+                },
+                {
+                  sender: 'AD-AXISBK-T',
+                  body: 'Auto-debit of INR 4,500 for HDFC Home Loan EMI completed on 12-Oct-26.',
+                  expected: 'EMI',
+                },
+              ].map((preset, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  style={{
+                    backgroundColor: Colors.cardBgLight,
+                    padding: 10,
+                    borderRadius: BorderRadius.md,
+                    borderWidth: 1,
+                    borderColor: Colors.borderDark,
+                  }}
+                  onPress={() => {
+                    setCustomSmsSender(preset.sender);
+                    setCustomSmsBody(preset.body);
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
+                    <Text style={{ color: Colors.emeraldGreen, fontWeight: '700', fontSize: 11 }}>{preset.sender}</Text>
+                    <Text style={{ color: Colors.slateSubtle, fontSize: 10 }}>Target: {preset.expected}</Text>
+                  </View>
+                  <Text style={{ color: Colors.crispWhite, fontSize: 11 }} numberOfLines={1}>{preset.body}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Sender Header Input */}
+            <Text style={styles.inputLabel}>TRAI Sender Header</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={customSmsSender}
+              onChangeText={setCustomSmsSender}
+              placeholder="e.g. AD-HDFCBK-T"
+              placeholderTextColor={Colors.slateGray}
+            />
+
+            {/* SMS Body Input */}
+            <Text style={styles.inputLabel}>SMS Body</Text>
+            <TextInput
+              style={[styles.modalInput, { height: 60, textAlignVertical: 'top' }]}
+              value={customSmsBody}
+              onChangeText={setCustomSmsBody}
+              placeholder="Paste raw SMS text..."
+              placeholderTextColor={Colors.slateGray}
+              multiline
+            />
+
+            {/* Parse & Classify Button */}
+            <TouchableOpacity
+              style={styles.submitBtn}
+              activeOpacity={0.8}
+              onPress={() => handleProcessBankSMS(customSmsSender, customSmsBody)}
+            >
+              <Sparkles size={18} color={Colors.primaryNavy} />
+              <Text style={styles.submitBtnText}>Run On-Device ONNX Inference</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -14,27 +14,47 @@ interface ChatInputBarProps {
   onSendMessage: (text: string) => void;
   onVoiceLogTrigger: () => void;
   isListening?: boolean;
+  value?: string;
+  onChangeText?: (text: string) => void;
+  languageLabel?: string;
+  placeholder?: string;
+  suggestions?: string[];
 }
 
 export const ChatInputBar: React.FC<ChatInputBarProps> = ({
   onSendMessage,
   onVoiceLogTrigger,
   isListening = false,
+  value,
+  onChangeText,
+  languageLabel = 'English, Hindi, Marathi',
+  placeholder,
+  suggestions = [
+    'Total Bank Balance',
+    'How much did I spend at Swiggy?',
+    'Spending on 18 Sep?',
+  ],
 }) => {
-  const [inputText, setInputText] = useState('');
+  const [internalText, setInternalText] = useState('');
+  const currentText = value !== undefined ? value : internalText;
 
-  const handleSend = () => {
-    if (!inputText.trim()) return;
-    onSendMessage(inputText.trim());
-    setInputText('');
+  const handleTextChange = (text: string) => {
+    if (onChangeText) {
+      onChangeText(text);
+    } else {
+      setInternalText(text);
+    }
   };
 
-  const suggestions = [
-    '₹350 Swiggy lunch',
-    '📊 Monthly budget forecast',
-    'किराना ₹1200 नगद (Cash)',
-    'भाजीपाला ₹240 UPI (Marathi)',
-  ];
+  const handleSend = () => {
+    if (!currentText.trim()) return;
+    onSendMessage(currentText.trim());
+    if (onChangeText) {
+      onChangeText('');
+    } else {
+      setInternalText('');
+    }
+  };
 
   return (
     <View style={styles.outerContainer}>
@@ -71,9 +91,9 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
         {/* Text Input */}
         <TextInput
           style={styles.textInput}
-          value={inputText}
-          onChangeText={setInputText}
-          placeholder="Type in Marathi, Hindi, or English..."
+          value={currentText}
+          onChangeText={handleTextChange}
+          placeholder={placeholder || `Type or speak in ${languageLabel}...`}
           placeholderTextColor={Colors.slateGray}
           multiline
           maxLength={300}
@@ -84,14 +104,14 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
           activeOpacity={0.8}
           style={[
             styles.sendButton,
-            inputText.trim().length > 0 ? styles.sendButtonActive : styles.sendButtonDisabled,
+            currentText.trim().length > 0 ? styles.sendButtonActive : styles.sendButtonDisabled,
           ]}
           onPress={handleSend}
-          disabled={!inputText.trim()}
+          disabled={!currentText.trim()}
         >
           <Send
             size={18}
-            color={inputText.trim().length > 0 ? Colors.crispWhite : Colors.slateGray}
+            color={currentText.trim().length > 0 ? Colors.crispWhite : Colors.slateGray}
           />
         </TouchableOpacity>
       </View>
@@ -100,7 +120,7 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
         <View style={styles.listeningBanner}>
           <ActivityIndicator size="small" color={Colors.emeraldGreen} />
           <Text style={styles.listeningText}>
-            Simulating multilingual speech recognition (Bhashini AI)...
+            🎤 Listening in {languageLabel}... Speak now
           </Text>
         </View>
       )}

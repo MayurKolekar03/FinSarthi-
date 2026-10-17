@@ -63,7 +63,7 @@ export const BorderRadius = {
   full: 9999,
 };
 
-export const Typography = {
+const fontSizes = {
   xs: 11,
   sm: 13,
   md: 15,
@@ -72,4 +72,18 @@ export const Typography = {
   '2xl': 24,
   '3xl': 28,
   '4xl': 34,
+};
+
+const fontWeights = {
+  normal: '400' as const,
+  medium: '500' as const,
+  semibold: '600' as const,
+  bold: '700' as const,
+  extrabold: '800' as const,
+};
+
+export const Typography = {
+  ...fontSizes,
+  fontSize: fontSizes,
+  fontWeight: fontWeights,
 };

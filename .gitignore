@@ -31,7 +31,32 @@ yarn-error.*
 *.pem
 
 # local env files
-.env*.local
+.env
+.env.*
+!.env.example
+
+# Python & ML build/cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+.pytest_cache/
+
+# ML training checkpoints & oversized weights (>100MB rejected by GitHub)
+**/checkpoints/
+**/results/
+**/saved_setfit_model/
+assets/models/model_fp32.onnx
+assets/models/model_int8.onnx
+
+# Temporary scratch & OS files
+scratch/
+Thumbs.db
 
 # typescript
 *.tsbuildinfo
